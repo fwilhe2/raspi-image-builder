@@ -47,7 +47,7 @@ storage:
       mode: 0644
       contents:
         inline: |
-          routernetes
+          rpik8s
     - path: /etc/ssh/sshd_config.d/20-enable-passwords.conf
       mode: 0644
       contents:
@@ -73,85 +73,7 @@ storage:
           #!/bin/bash
           set -e
           /usr/local/bin/setup-loopback.sh
-          curl -sfL https://get.k3s.io | sh -s - --disable=traefik --disable=servicelb --flannel-backend=host-gw --flannel-iface=k3s-lo
+          curl -sfL https://get.k3s.io | sh -s
           /usr/bin/sleep 30
           /usr/local/bin/kubectl apply -f https://github.com/rancher/system-upgrade-controller/releases/latest/download/system-upgrade-controller.yaml
           /usr/local/bin/kubectl wait deployment -n system-upgrade system-upgrade-controller --for condition=Available=True --timeout=24h
-          /usr/local/bin/kubectl apply -f https://raw.githubusercontent.com/routernetes/routernetes/main/k3s/upgrade-plan.yaml
-          /usr/local/bin/install-olm.sh
-    - path: /usr/local/bin/install-olm.sh
-      mode: 0755
-      contents:
-        inline: |
-          #!/bin/bash
-          set -e
-          export ARCH=$(case $(uname -m) in x86_64) echo -n amd64 ;; aarch64) echo -n arm64 ;; *) echo -n $(uname -m) ;; esac)
-          export OS=$(uname | awk '{print tolower($0)}')
-          export OPERATOR_SDK_DL_URL=https://github.com/operator-framework/operator-sdk/releases/latest/download
-          curl -L -o /usr/local/bin/operator-sdk ${OPERATOR_SDK_DL_URL}/operator-sdk_${OS}_${ARCH}
-          chmod +x /usr/local/bin/operator-sdk
-          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-          /usr/local/bin/operator-sdk olm install
-          /usr/bin/sleep 30
-          /usr/local/bin/kubectl wait --timeout=24h --for=jsonpath='{.status.connectionState.lastObservedState}'=READY -n olm catalogsource/operatorhubio-catalog
-          /usr/local/bin/kubectl apply -f https://operatorhub.io/install/routernetes-operator.yaml
-          /usr/bin/sleep 30
-          /usr/local/bin/kubectl wait --timeout=24h --for=jsonpath='{.status.state}'=AtLatestKnown -n operators sub/my-routernetes-operator
-          csv=$(/usr/local/bin/kubectl get -n operators sub/my-routernetes-operator -o jsonpath='{.status.installedCSV}')
-          /usr/bin/sleep 30
-          /usr/local/bin/kubectl wait --timeout=24h --for=jsonpath='{.status.phase}'=Succeeded -n operators csv/$csv
-          /usr/local/bin/install-default-router.sh
-    - path: /usr/local/bin/setup-loopback.sh
-      mode: 0755
-      contents:
-        inline: |
-          #!/bin/bash
-          set -e
-          /usr/bin/systemctl start NetworkManager
-          /usr/bin/nmcli connection add type dummy ifname k3s-lo ipv4.method manual ipv4.addresses 100.64.0.1/32 ipv6.method ignore connection.zone r9s-internal
-          /usr/bin/nmcli connection up dummy-k3s-lo
-    - path: /usr/local/bin/install-default-router.sh
-      mode: 0755
-      contents:
-        inline: |
-          #!/bin/bash
-          set -e
-          export interfaces=$(/usr/sbin/ip -details -json addr | /usr/bin/jq '. | map(select((.linkinfo == null) and (.link_type == "ether")))')
-          export external=$(echo "$interfaces" | /usr/bin/jq -r '. | map(select(.addr_info[] | (.dynamic == true and .family == "inet")))[0] | .ifname')
-          export internal=$(echo "$interfaces" | /usr/bin/jq -r --arg external "$external"  '. | map(select(.ifname != $external))[0] | .ifname')
-          mkdir -p /tmp/default-router
-          cd /tmp/default-router
-          curl -L -O https://raw.githubusercontent.com/routernetes/routernetes/main/k3s/default_router.yaml
-          cat <<EOF >patches.yaml
-          apiVersion: routernetes.net/v1alpha1
-          kind: Router
-          metadata:
-            name: default-router
-            namespace: routernetes
-          spec:
-            dns:
-              listenInterface: $internal
-            interfaces:
-              - name: $external
-                type: ethernet
-                zone: outside
-                ipv4:
-                  method: auto
-              - name: $internal
-                type: ethernet
-                ipv4:
-                  method: manual
-                  address: 192.168.64.1/24
-          EOF
-
-          cat <<EOF >kustomization.yaml
-          resources:
-          - default_router.yaml
-
-          patches:
-          - path: patches.yaml
-            target:
-              kind: Router
-          EOF
-
-          /usr/local/bin/kubectl apply -k .

@@ -1,9 +1,3 @@
-## Create an ISO
-```
-podman run --pull=always --rm -v .:/data:Z -w /data -e DEST_DEVICE=/dev/sda quay.io/routernetes/create-iso:latest
-```
-
-A file named ```routernetes.iso``` will be created in your working directory.
 
 ## Create an RPI image
 ```

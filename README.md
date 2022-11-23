@@ -1,6 +1,5 @@
-# routernetes
-Use Kubernetes to make a home router!
+# Immutable Image-Based Raspi K8s
 
-See the [wiki](https://github.com/routernetes/routernetes/wiki) for information on this project
+Based on [routernetes](https://github.com/routernetes/routernetes)
 
-For the Kubernetes Operator portion of this project visit: https://github.com/routernetes/routernetes-operator
+
